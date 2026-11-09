@@ -1,13 +1,15 @@
-ROAD RAGE '96 — CURVED ROAD UPDATE
+ROAD RAGE '96 — FIXED BUILD (2026-11-09)
 
-Open index.html from the extracted folder, keeping the assets/ directory beside it.
+This release fixes a JavaScript ReferenceError from the previous road curve update:
+"maxy is not defined". That error stopped canvas rendering midway through each frame.
 
-To publish on GitHub Pages, upload the CONTENTS of road_rage_96/ to the root of the djrozzo-glitch/roadrage repository and replace the current index.html.
+Contains index.html and all graphical assets (assets/).
 
-Changes:
-- Roads use an integrated world-space centerline and per-segment tangent angle.
-- The camera is directed along the road tangent instead of showing road side-sliding.
-- Vehicles, roadside objects, hazards and opponents use the same road centerline.
-- Reduced roadside sign sprite size.
+Deployment: unzip, open the road_rage_96 folder, then upload BOTH index.html AND the assets folder to the root of your GitHub repository, replacing existing files. Do not upload only the index.html file, since sprites and backgrounds are loaded separately.
 
-Controls: WASD / arrow keys = steer/accelerate/brake. Space = punch, Shift = kick, P = pause.
+GitHub Pages: https://djrozzo-glitch.github.io/roadrage/
+After uploading, hard refresh: Cmd + Shift + R.
+
+Controls: Up/W accelerate; Down/S brake; Left/Right or A/D steer; Space/J punch; Shift/K kick; P/Esc pause.
+
+Validation: JavaScript syntax checked and scene rendered in headless Chromium with assets embedded for the test (no page errors). Screenshots from first frame and a steering test were reviewed. Full GitHub Pages deployment was not tested.

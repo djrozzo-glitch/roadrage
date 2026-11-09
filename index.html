@@ -16,7 +16,10 @@ const clamp=(a,lo,hi)=>Math.max(lo,Math.min(hi,a)), lerp=(a,b,t)=>a+(b-a)*t, cho
 const keys=new Set(), keyMap={KeyW:'ArrowUp',KeyS:'ArrowDown',KeyA:'ArrowLeft',KeyD:'ArrowRight',KeyJ:'Space',KeyK:'ShiftLeft'};
 let mode='menu', player,rivals,traffic,track,notice=[],shake=0,hitFlash=0,levelTime=0,finishedAt=0,last=performance.now(),lastStrike=false,currentBg='day',cameraHeading=0;
 const segLen=180, roadWidth=2200, drawDistance=170, cameraDepth=1, cameraHeight=980;
-const RACE_SEGMENTS=170, RACE_LENGTH=RACE_SEGMENTS*segLen;
+const RACE_SEGMENTS=720, RACE_LENGTH=RACE_SEGMENTS*segLen;
+// Slower simulation-time progression: a full race lasts several minutes at top speed.
+const RACE_PACE=14;
+const PLAYER_CAMERA_DISTANCE=400;
 const spritePaths={
   bikes:['player_straight','player_left','player_right','player_punch','player_kick','rival_red','rival_blue','rival_green'],
   vehicles:['car_white','car_red','car_blue','truck_box','pickup','van','police_car','police_bike'],
@@ -82,11 +85,11 @@ function update(dt){
   const roadHeading=lerp(seg.heading,track[seg.index+1].heading,portion);
   cameraHeading=lerp(cameraHeading,roadHeading+player.lean*.045,Math.min(1,dt*6));
   if(Math.abs(player.x)>1.06){ player.speed=Math.min(player.speed,5400); if(Math.abs(player.x)>1.38){ player.x=clamp(player.x,-1.45,1.45); if(Math.random()<dt*.9)onHit(4,'ROUGH SHOULDER'); }}
-  player.z += player.speed*dt; if(player.z>=RACE_LENGTH){ player.z=RACE_LENGTH; player.rank=1+rivals.filter(r=>r.z>player.z&&r.alive).length; end(true); return; }
+  player.z += player.speed*dt/RACE_PACE; if(player.z>=RACE_LENGTH){ player.z=RACE_LENGTH; player.rank=1+rivals.filter(r=>r.z>player.z&&r.alive).length; end(true); return; }
   for(const h of seg.hazards){ if(levelTime-h.used<1.2)continue; if(Math.abs((seg.index*segLen)-player.z)<170 && Math.abs(h.x-player.x)<0.23){ h.used=levelTime; onHit(h.kind==='oil_slick'?9:16, h.kind==='oil_slick'?'SLIPPERY!':'OBSTACLE!'); player.x += (Math.random()-.5)*.45; }}
-  for(const r of rivals){ if(!r.alive)continue; r.attackCd=Math.max(0,r.attackCd-dt); r.stun=Math.max(0,r.stun-dt); if(r.stun>0)r.speed=Math.max(1800,r.speed-2800*dt); else r.speed=lerp(r.speed,r.baseSpeed+Math.sin(levelTime*.5+r.wobble)*320,dt*.7); r.z += r.speed*dt; r.x += Math.sin(levelTime*.85+r.wobble)*dt*.17 - (track[seg.index+1].heading-seg.heading)*dt*.5; r.x=clamp(r.x,-.89,.89); if(Math.abs(r.z-player.z)<380&&Math.abs(r.x-player.x)<.25){ if(player.invuln===0&&r.attackCd===0){ onHit(7+r.wobble%4,`${r.name} ATTACKS!`); r.attackCd=2.2; } r.x += r.x>player.x?.12:-.12; }}
+  for(const r of rivals){ if(!r.alive)continue; r.attackCd=Math.max(0,r.attackCd-dt); r.stun=Math.max(0,r.stun-dt); if(r.stun>0)r.speed=Math.max(1800,r.speed-2800*dt); else r.speed=lerp(r.speed,r.baseSpeed+Math.sin(levelTime*.5+r.wobble)*320,dt*.7); r.z += r.speed*dt/RACE_PACE; r.x += Math.sin(levelTime*.85+r.wobble)*dt*.17 - (track[seg.index+1].heading-seg.heading)*dt*.5; r.x=clamp(r.x,-.89,.89); if(Math.abs(r.z-player.z)<380&&Math.abs(r.x-player.x)<.25){ if(player.invuln===0&&r.attackCd===0){ onHit(7+r.wobble%4,`${r.name} ATTACKS!`); r.attackCd=2.2; } r.x += r.x>player.x?.12:-.12; }}
   for(const c of traffic){
-    c.z += c.speed*dt;
+    c.z += c.speed*dt/RACE_PACE;
     if(c.z<player.z-4000)c.z=player.z+26000+Math.random()*26000;
     // Traffic follows flowing lanes, adds a gentle steering animation and reacts
     // to approaching faster bikes with visible brake lights.
@@ -154,7 +157,13 @@ function drawRoad(){
   for(const c of traffic){ if(c.z>player.z-100 && c.z<player.z+drawDistance*segLen){ const t=c.z/segLen, idx=Math.floor(t), frac=t-idx; const center=lerp(track[idx].centerX,track[idx+1].centerX,frac)+c.x*roadWidth; const y=lerp(track[idx].y,track[idx+1].y,frac); const p=proj(center,y,c.z,camX,cameraY,player.z-400); visible.push({depth:c.z,type:'vehicle',p,obj:c}); } }
   for(const r of rivals){ if(!r.alive || r.z<player.z-100 || r.z>player.z+drawDistance*segLen)continue; const t=r.z/segLen, idx=Math.floor(t), frac=t-idx; const center=lerp(track[idx].centerX,track[idx+1].centerX,frac)+r.x*roadWidth; const y=lerp(track[idx].y,track[idx+1].y,frac); const p=proj(center,y,r.z,camX,cameraY,player.z-400); visible.push({depth:r.z,type:'rival',p,obj:r}); }
   visible.sort((a,b)=>b.depth-a.depth);
-  for(const v of visible){ if(!v.p)continue; if(v.type==='roadside'){ const img=art.roadside[v.obj.kind]; const h=clamp(v.p.w*.23*(v.obj.scale||1),5,H*.40); drawImageBottomCenter(img,v.p.x,v.p.y,h,.98); } else if(v.type==='hazard'){ const img=art.hazards[v.obj.kind]; const h=clamp(v.p.w*.13,6,H*.19); drawImageBottomCenter(img,v.p.x,v.p.y,h, levelTime-v.obj.used<.45?.6:1); } else if(v.type==='vehicle'){ const img=art.vehicles[v.obj.sprite]; const h=clamp(v.p.w*.43*(v.obj.sprite==='truck_box'?1.12:.92),10,H*.65); drawAnimatedVehicle(v.obj,v.p,h); } else if(v.type==='rival'){ const img=pickRivalSprite(v.obj); const h=clamp(v.p.w*.52,10,H*.82); drawImageBottomCenter(img,v.p.x,v.p.y,h); } }
+  for(const v of visible){ if(!v.p)continue; if(v.type==='roadside'){ const img=art.roadside[v.obj.kind]; const h=clamp(v.p.w*.23*(v.obj.scale||1),5,H*.40); drawImageBottomCenter(img,v.p.x,v.p.y,h,.98); } else if(v.type==='hazard'){ const img=art.hazards[v.obj.kind]; const h=clamp(v.p.w*.13,6,H*.19); drawImageBottomCenter(img,v.p.x,v.p.y,h, levelTime-v.obj.used<.45?.6:1); } else if(v.type==='vehicle'){ const img=art.vehicles[v.obj.sprite]; const h=clamp(v.p.w*.43*(v.obj.sprite==='truck_box'?1.12:.92),10,H*.65); drawAnimatedVehicle(v.obj,v.p,h); } else if(v.type==='rival'){ const img=pickRivalSprite(v.obj);
+    // Real perspective: all riders share the same physical size. A rival at
+    // the player's road position has approximately the player's sprite height.
+    // Farther riders shrink proportionally to inverse distance from the camera.
+    const playerH=Math.min(255,H*.36);
+    const h=clamp(playerH*PLAYER_CAMERA_DISTANCE*v.p.scale,3,playerH*1.06);
+    drawImageBottomCenter(img,v.p.x,v.p.y,h); } }
 }
 
 function hud(){ const u=Math.min(W/1280,H/720), pad=Math.max(14,25*u), font=px=>`900 ${Math.round(px*u)}px Arial, sans-serif`, boxWidth=Math.min(285, W*.35); ctx.fillStyle='#10151bdc'; ctx.fillRect(pad,pad,boxWidth,115*u); ctx.fillStyle='#edcc4c'; ctx.font=font(16); ctx.fillText("ROAD RAGE ‘96",pad+13*u,pad+24*u); ctx.fillStyle='#fff'; ctx.font=font(29); ctx.fillText(`${Math.round(player.speed/45)} KM/H`,pad+13*u,pad+58*u); ctx.font=font(13); ctx.fillStyle='#aeb6c7'; ctx.fillText('HEALTH',pad+13*u,pad+78*u); rect(pad+13*u,pad+86*u,boxWidth-26*u,11*u,'#39424d'); rect(pad+13*u,pad+86*u,(boxWidth-26*u)*player.health/100,11*u,player.health<25?'#ed615a':'#7edb90');
